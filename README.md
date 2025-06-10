@@ -1,6 +1,6 @@
 # Fixer
 
-Fixer is a simple command-line tool that uses Google's Gemini AI to answer your questions and follow your instructions. You give it a prompt, and it gives you a response from the AI.
+Fixer is an experimental project to build your own AI coding assistant, inspired by tools like Cursor and Claude Code. We're creating a simplified version that uses Google's Gemini AI to go beyond just answering questions. Fixer can be instructed to perform tasks like creating files, writing code, and running programs, acting as your personal software assistant. This project is a hands-on way to explore how to build your own powerful, "agentic" AI tools from the ground up.
 
 ## Setup
 
@@ -38,3 +38,4 @@ If you want to see how many "tokens" (pieces of words) your prompt and the respo
 
 ```bash
 python main.py "What is the capital of France? --verbose" 
+```
