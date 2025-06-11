@@ -5,7 +5,7 @@ from google.genai import types
 from dotenv import load_dotenv
 
 from prompts import system_prompt
-from call_function import available_functions
+from call_function import available_functions, call_function
 
 
 def main():
@@ -36,22 +36,32 @@ def main():
 
 
 def generate_content(client, messages, verbose):
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=messages,
-        config=types.GenerateContentConfig(
-            tools=[available_functions], system_instruction=system_prompt
-        ),
-    )
-    if verbose:
-        print("Prompt tokens:", response.usage_metadata.prompt_token_count)
-        print("Response tokens:", response.usage_metadata.candidates_token_count)
+    for i in range(20):
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-001",
+            contents=messages,
+            config=types.GenerateContentConfig(
+                tools=[available_functions], system_instruction=system_prompt
+            ),
+        )
+        if verbose:
+            print(f"\n--- Iteration {i+1} ---")
+            print("Prompt tokens:", response.usage_metadata.prompt_token_count)
+            print("Response tokens:", response.usage_metadata.candidates_token_count)
 
-    if not response.function_calls:
-        return response.text
+        if not response.function_calls:
+            print(response.text)
+            return
 
-    for function_call_part in response.function_calls:
-        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+        # The model response is a request to call a function.
+        # We need to add it to the conversation history.
+        for candidate in response.candidates:
+            messages.append(candidate.content)
+
+        # Now, call the function and add the result to the history.
+        function_call = response.function_calls[0]
+        function_response = call_function(function_call, verbose)
+        messages.append(types.Content(parts=[function_response]))
 
 
 if __name__ == "__main__":
