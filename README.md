@@ -21,15 +21,18 @@ Fixer is an experimental project to build your own AI coding assistant, inspired
 
 ## How to Use
 
-To use Fixer, run the `main.py` script from your terminal and type your prompt after it.
+To use Fixer, run the `main.py` script from your terminal and give it a prompt. Fixer can answer questions or perform file system operations.
 
-```bash
-python main.py "Your prompt goes here"
-```
-
-For example:
+For example, to ask a question:
 ```bash
 python main.py "Explain what a neural network is in simple terms"
+```
+
+You can also ask it to perform tasks, like listing files, reading them, or even writing new ones:
+```bash
+python main.py "List all the files in the current directory"
+python main.py "Read the contents of the file called main.py"
+python main.py "Write a new file called 'test.txt' with the content 'hello world'"
 ```
 
 ### Verbose Mode
