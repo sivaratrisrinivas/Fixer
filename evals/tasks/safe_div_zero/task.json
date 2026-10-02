@@ -1,0 +1,6 @@
+{
+  "prompt": "safe_div(1, 0) crashes. It is supposed to return None. Fix it.",
+  "protected": [
+    "test_mathx.py"
+  ]
+}

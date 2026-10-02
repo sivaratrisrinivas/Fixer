@@ -1,67 +1,74 @@
-# Fixer: An AI Coding Assistant
+# Fixer
 
-Fixer is a powerful, terminal-based AI coding assistant built with Python and Google's Gemini API. It's an experimental project that demonstrates how to create an "agentic" AI that can not only answer questions but also interact with your file system to read, write, and execute code to solve problems.
+A small coding agent for the terminal. You point it at a project directory and describe a bug. It reads the code, runs the tests, proposes a change as a diff, waits for you to approve it, and then re-runs the tests. Gemini drives it through function calling, but the loop, the tools and the eval don't depend on any one provider.
 
-## How It Works
-
-Fixer operates on a conversational loop. When you give it a prompt, it uses the Gemini API's function-calling capabilities to form a plan. It can use a set of sandboxed tools to:
-
-*   List files and directories
-*   Read file contents
-*   Write or overwrite files
-*   Execute Python scripts
-
-After each tool is used, the result is sent back to the AI, which then decides on the next step. This loop continues until the task is complete or it reaches a maximum number of iterations. The agent's "thought process" can be viewed by running it with the `--verbose` flag.
-
-## Project Structure
-
-*   `main.py`: The entry point for the application. It handles command-line arguments, initializes the AI client, and manages the main conversational loop.
-*   `prompts.py`: Contains the system prompt that gives the AI its persona and instructions. It also dynamically generates a file tree of the current project to provide the AI with context.
-*   `call_function.py`: Acts as a dispatcher. It maps the function names requested by the AI to the actual Python functions and injects the sandboxed `working_directory`.
-*   `functions/`: This directory contains the individual Python scripts for each tool the AI can use (e.g., `get_files_info.py`, `write_file.py`).
-*   `calculator/`: A sample project directory containing a simple command-line calculator. This is used as a sandbox for the AI to work in and was used to demonstrate its debugging capabilities.
-
-## Setup
-
-1.  **Get your API Key:** You'll need an API key from Google for the Gemini model. You can get one from [Google AI Studio](https://aistudio.google.com/app/apikey).
-
-2.  **Set up your environment:**
-    *   Create a file named `.env` in the root of the project.
-    *   Add your API key to the `.env` file like this:
-        ```
-        GEMINI_API_KEY="YOUR_API_KEY_HERE"
-        ```
-
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-## How to Use
-
-To use Fixer, run the `main.py` script from your terminal and provide a prompt in quotes.
-
-### Basic Questions
 ```bash
-python3 main.py "Explain what a neural network is in simple terms"
+pip install -r requirements.txt
+echo 'GEMINI_API_KEY=...' > .env
+python -m fixer "3 + 7 * 2 should be 17" --dir calculator
 ```
 
-### File System Operations
-Fixer can interact with the file system. For example:
+## What it can do
+
+| Tool | What it does |
+| --- | --- |
+| `list_files` | List a directory, hiding `.git`, `__pycache__`, virtualenvs and similar noise |
+| `read_file` | Read UTF-8 text, capped at 10,000 characters |
+| `write_file` | Show a unified diff and write only after you approve it |
+| `run_python` | Run a `.py` file with arguments; 30 s timeout, output capped |
+| `run_tests` | Run pytest, or unittest discovery if pytest isn't installed, and report the result |
+
+The model may ask for several tools in one turn, and all of them run. Each run is limited to `--max-steps` model turns (default 20).
+
+## Safety
+
+- **Containment.** Every path is resolved with symlinks followed and must stay inside `--dir`. Absolute paths, `..`, symlinks that leave the tree and sibling folders with the same prefix are all refused. The old `startswith` check allowed `../app-secrets` for a root of `app`.
+- **Approval before writes.** You see the diff and answer `y` or `N`. Without a terminal, writes are refused unless you pass `--yes`.
+- **No secrets for child processes.** Code the agent runs gets a minimal environment, so `GEMINI_API_KEY` and other variables don't leak into it.
+- **Errors go back to the model.** A rejected write or a missing file comes back as text the model can react to, not as a crash.
+
+## Evals
+
+`evals/` holds six seeded-bug tasks: operator precedence, an off-by-one in pagination, a mutable default argument, slug case, divide by zero and a unit conversion. Each task is a small repo, a prompt and the tests that define "fixed".
+
+For each task the harness copies the repo to a temp dir and runs the agent with writes auto-approved. It then judges the result **itself**: it re-runs pristine copies of the task's tests, and a run that edited a test file fails outright.
+
 ```bash
-python3 main.py "List all the files in the current directory"
-python3 main.py "Read the contents of the file called main.py"
-python3 main.py "Write a new file called 'test.txt' with the content 'hello world'"
+python -m evals.run --model oracle      # scripted reference fix
+python -m evals.run --model noop        # looks around, changes nothing
+python -m evals.run --model tamper      # rewrites the tests to pass
+GEMINI_API_KEY=... python -m evals.run --model gemini --out evals/results/gemini.json
 ```
 
-### Debugging Example
-You can even ask Fixer to debug code. For example, to fix a bug in the included calculator application:
-```bash
-python3 main.py "fix the bug: 3 + 7 * 2 shouldn't be 20"
+Results from this repo (offline scripted models, Python 3.12):
+
+| Model | Passed | Tampered | Mean steps | Mean tool calls |
+| --- | --- | --- | --- | --- |
+| oracle | 6/6 | 0 | 5.0 | 5.0 |
+| noop | 0/6 | 0 | 2.0 | 1.0 |
+| tamper | 0/6 | 6 | 3.0 | 2.0 |
+
+The scripted models exist to show that the harness can tell a real fix from no change or from gamed tests. A harness that scores everything 100% measures nothing. The oracle also checks that the loop runs several tool calls in one turn. Real model numbers come from `--model gemini`. They haven't been recorded here because this repo's CI has no API key.
+
+## Layout
+
+```
+fixer/workspace.py   path containment
+fixer/tools.py       tools, diff and approval, subprocess sandboxing
+fixer/agent.py       provider-neutral loop (Model.step -> Reply)
+fixer/gemini.py      Gemini adapter (default gemini-2.5-flash, override with --model or FIXER_MODEL)
+fixer/cli.py         python -m fixer
+evals/               seeded tasks, scripted models, harness
+tests/               31 pytest tests
+calculator/          demo project to point the agent at
 ```
 
-### Verbose Mode
-To see the agent's step-by-step reasoning, add the `--verbose` flag to your command:
+## Development
+
 ```bash
-python3 main.py "your prompt here" --verbose
+pip install -r requirements-dev.txt
+pytest --cov=fixer --cov=evals
+ruff check . && ruff format --check .
 ```
+
+CI runs lint, the tests (88% coverage), and the offline eval with a gate: the oracle must pass every task and the no-op baseline must pass none.

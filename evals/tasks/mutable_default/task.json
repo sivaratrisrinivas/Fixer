@@ -1,0 +1,6 @@
+{
+  "prompt": "Calling add_tag twice without a list leaks tags between calls. Fix it.",
+  "protected": [
+    "test_tags.py"
+  ]
+}

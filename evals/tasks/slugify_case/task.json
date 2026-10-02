@@ -1,0 +1,6 @@
+{
+  "prompt": "slugify(\"Hello, World!\") returns \"Hello-World\" but URLs need lowercase. Fix it.",
+  "protected": [
+    "test_text_utils.py"
+  ]
+}
