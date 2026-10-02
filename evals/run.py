@@ -84,7 +84,25 @@ def make_model(name: str, task_dir: Path, gemini_model: str | None):
     raise SystemExit(f"unknown model {name!r}; choose from {sorted([*SCRIPTED, 'gemini'])}")
 
 
-def run_task(task_dir: Path, model_name: str, max_steps: int, gemini_model: str | None) -> TaskResult:
+def dump_transcript(path: Path, run) -> None:
+    """Write a readable log of a run so failures can be read afterwards."""
+    lines = []
+    for turn in run.transcript:
+        if turn.role == "user":
+            lines.append(f"USER: {turn.text}")
+        elif turn.role == "model":
+            if turn.text:
+                lines.append(f"MODEL: {turn.text}")
+            lines += [f"CALL {c.name} {json.dumps(c.args)[:2000]}" for c in turn.tool_calls]
+        else:
+            lines += [f"RESULT {r.name}:\n{r.output[:2000]}" for r in turn.results]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+
+
+def run_task(
+    task_dir: Path, model_name: str, max_steps: int, gemini_model: str | None, transcript_dir: Path | None = None
+) -> TaskResult:
     meta = json.loads((task_dir / "task.json").read_text())
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp) / "repo"
@@ -95,6 +113,8 @@ def run_task(task_dir: Path, model_name: str, max_steps: int, gemini_model: str 
         result = run_agent(model, toolbox, meta["prompt"], max_steps=max_steps)
         seconds = time.perf_counter() - started
         passed, tampered = judge(task_dir, workdir)
+        if transcript_dir is not None:
+            dump_transcript(transcript_dir / f"{task_dir.name}.txt", result)
     return TaskResult(
         task=task_dir.name,
         passed=passed,
@@ -130,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-steps", type=int, default=15)
     parser.add_argument("--task", action="append", help="Run only these tasks (repeatable)")
     parser.add_argument("--out", type=Path, help="Write the JSON summary here")
+    parser.add_argument("--transcripts", type=Path, help="Write one readable transcript per task into this folder")
     parser.add_argument("--min-pass-rate", type=float, default=None, help="Exit 1 if the pass rate is lower")
     args = parser.parse_args(argv)
 
@@ -138,13 +159,21 @@ def main(argv: list[str] | None = None) -> int:
         task_dirs = [p for p in task_dirs if p.name in set(args.task)]
 
     results = []
+    aborted = None
     for task_dir in task_dirs:
-        r = run_task(task_dir, args.model, args.max_steps, args.gemini_model)
+        try:
+            r = run_task(task_dir, args.model, args.max_steps, args.gemini_model, args.transcripts)
+        except Exception as exc:  # e.g. a provider's daily quota; keep what finished
+            aborted = f"{task_dir.name}: {type(exc).__name__}: {str(exc)[:300]}"
+            print(f"ABORTED   {aborted}")
+            break
         flag = "PASS" if r.passed else ("TAMPERED" if r.tampered else "FAIL")
         print(f"{flag:9} {r.task:24} steps={r.steps:<3} tools={r.tool_calls:<3} {r.seconds:.2f}s")
         results.append(r)
 
     summary = summarize(args.model, results)
+    summary["gemini_model"] = args.gemini_model if args.model == "gemini" else None
+    summary["aborted"] = aborted
     print(
         f"\n{args.model}: {summary['passed']}/{summary['tasks']} passed "
         f"(pass rate {summary['pass_rate']:.0%}), {summary['tampered']} tampered, "
@@ -153,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(summary, indent=2) + "\n")
+    if aborted:
+        return 2
     if args.min_pass_rate is not None and summary["pass_rate"] < args.min_pass_rate:
         return 1
     return 0

@@ -1,6 +1,6 @@
 venv/
+.venv/
 .env
-
-__pycache__/.venv/
+__pycache__/
 evals/results/
 .coverage

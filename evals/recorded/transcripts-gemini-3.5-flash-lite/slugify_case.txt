@@ -1,0 +1,83 @@
+USER: slugify("Hello, World!") returns "Hello-World" but URLs need lowercase. Fix it.
+CALL list_files {}
+RESULT list_files:
+- test_text_utils.py (235 bytes)
+- text_utils.py (149 bytes)
+CALL read_file {"path": "text_utils.py"}
+RESULT read_file:
+import re
+
+
+def slugify(title):
+    """'Hello, World!' -> 'hello-world'"""
+    words = re.findall(r"[A-Za-z0-9]+", title)
+    return "-".join(words)
+
+CALL read_file {"path": "test_text_utils.py"}
+RESULT read_file:
+from text_utils import slugify
+
+def test_lowercase():
+    assert slugify("Hello, World!") == "hello-world"
+
+def test_numbers_kept():
+    assert slugify("Top 10 Tips") == "top-10-tips"
+
+def test_empty():
+    assert slugify("!!!") == ""
+
+CALL run_tests {}
+RESULT run_tests:
+exit code 1
+STDOUT:
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+________________________________ test_lowercase ________________________________
+
+    def test_lowercase():
+>       assert slugify("Hello, World!") == "hello-world"
+E       AssertionError: assert 'Hello-World' == 'hello-world'
+E         
+E         - hello-world
+E         ? ^     ^
+E         + Hello-World
+E         ? ^     ^
+
+test_text_utils.py:4: AssertionError
+______________________________ test_numbers_kept _______________________________
+
+    def test_numbers_kept():
+>       assert slugify("Top 10 Tips") == "top-10-tips"
+E       AssertionError: assert 'Top-10-Tips' == 'top-10-tips'
+E         
+E         - top-10-tips
+E         ? ^      ^
+E         + Top-10-Tips
+E         ? ^      ^
+
+test_text_utils.py:7: AssertionError
+=========================== short test summary info ============================
+FAILED test_text_utils.py::test_lowercase - AssertionError: assert 'Hello-Wor...
+FAILED test_text_utils.py::test_numbers_kept - AssertionError: assert 'Top-10...
+2 failed, 1 passed in 0.01s
+
+CALL write_file {"path": "text_utils.py", "content": "import re\n\n\ndef slugify(title):\n    \"\"\"'Hello, World!' -> 'hello-world'\"\"\"\n    words = re.findall(r\"[A-Za-z0-9]+\", title)\n    return \"-\".join(words).lower()\n"}
+RESULT write_file:
+Wrote "text_utils.py" (157 characters).
+--- a/text_utils.py
++++ b/text_utils.py
+@@ -4,4 +4,4 @@
+ def slugify(title):
+     """'Hello, World!' -> 'hello-world'"""
+     words = re.findall(r"[A-Za-z0-9]+", title)
+-    return "-".join(words)
++    return "-".join(words).lower()
+
+CALL run_tests {}
+RESULT run_tests:
+exit code 0
+STDOUT:
+...                                                                      [100%]
+3 passed in 0.01s
+
+MODEL: I fixed the issue by adding `.lower()` to the returned slug in `text_utils.py` so that `slugify` correctly produces lowercase URLs (e.g. `"hello-world"`). All tests now pass.

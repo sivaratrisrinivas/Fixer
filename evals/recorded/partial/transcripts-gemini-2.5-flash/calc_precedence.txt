@@ -1,0 +1,72 @@
+USER: The calculator says 3 + 7 * 2 is 20. It should be 17. Fix it.
+CALL list_files {}
+RESULT list_files:
+- calculator.py (910 bytes)
+- test_calculator.py (257 bytes)
+CALL read_file {"path": "test_calculator.py"}
+RESULT read_file:
+from calculator import Calculator
+
+def test_precedence():
+    assert Calculator().evaluate("3 + 7 * 2") == 17
+
+def test_left_to_right():
+    assert Calculator().evaluate("8 / 2 * 3") == 12
+
+def test_simple():
+    assert Calculator().evaluate("10 - 4") == 6
+
+CALL read_file {"path": "calculator.py"}
+RESULT read_file:
+class Calculator:
+    def __init__(self):
+        self.operators = {
+            "+": lambda a, b: a + b,
+            "-": lambda a, b: a - b,
+            "*": lambda a, b: a * b,
+            "/": lambda a, b: a / b,
+        }
+        self.precedence = {"+": 1, "-": 1, "*": 1, "/": 2}
+
+    def evaluate(self, expression):
+        tokens = expression.split()
+        values, ops = [], []
+        for token in tokens:
+            if token in self.operators:
+                while ops and self.precedence[ops[-1]] >= self.precedence[token]:
+                    self._apply(ops, values)
+                ops.append(token)
+            else:
+                values.append(float(token))
+        while ops:
+            self._apply(ops, values)
+        return values[0]
+
+    def _apply(self, ops, values):
+        op = ops.pop()
+        b, a = values.pop(), values.pop()
+        values.append(self.operators[op](a, b))
+
+CALL write_file {"path": "calculator.py", "content": "class Calculator:\n    def __init__(self):\n        self.operators = {\n            \"+\": lambda a, b: a + b,\n            \"-\": lambda a, b: a - b,\n            \"*\": lambda a, b: a * b,\n            \"/\": lambda a, b: a / b,\n        }\n        self.precedence = {\"+\": 1, \"-\": 1, \"*\": 2, \"/\": 2}\n\n    def evaluate(self, expression):\n        tokens = expression.split()\n        values, ops = [], []\n        for token in tokens:\n            if token in self.operators:\n                while ops and self.precedence[ops[-1]] >= self.precedence[token]:\n                    self._apply(ops, values)\n                ops.append(token)\n            else:\n                values.append(float(token))\n        while ops:\n            self._apply(ops, values)\n        return values[0]\n\n    def _apply(self, ops, values):\n        op = ops.pop()\n        b, a = values.pop(), values.pop()\n        values.append(self.operators[op](a, b))\n"}
+RESULT write_file:
+Wrote "calculator.py" (910 characters).
+--- a/calculator.py
++++ b/calculator.py
+@@ -6,7 +6,7 @@
+             "*": lambda a, b: a * b,
+             "/": lambda a, b: a / b,
+         }
+-        self.precedence = {"+": 1, "-": 1, "*": 1, "/": 2}
++        self.precedence = {"+": 1, "-": 1, "*": 2, "/": 2}
+ 
+     def evaluate(self, expression):
+         tokens = expression.split()
+
+CALL run_tests {}
+RESULT run_tests:
+exit code 0
+STDOUT:
+...                                                                      [100%]
+3 passed in 0.01s
+
+MODEL: I've fixed the issue by changing the precedence of multiplication from 1 to 2 in `calculator.py`. This ensures that multiplication is performed before addition, correcting the order of operations. All tests now pass.
