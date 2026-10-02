@@ -1,0 +1,6 @@
+{
+  "prompt": "paginate(items, 1, 10) skips the first ten items. Pages are 1-based. Fix it.",
+  "protected": [
+    "test_pager.py"
+  ]
+}

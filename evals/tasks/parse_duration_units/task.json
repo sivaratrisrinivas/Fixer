@@ -1,0 +1,6 @@
+{
+  "prompt": "parse_duration(\"1h30m\") returns 111600, not 5400. Fix it.",
+  "protected": [
+    "test_durations.py"
+  ]
+}

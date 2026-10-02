@@ -1,0 +1,21 @@
+[project]
+name = "fixer"
+version = "0.2.0"
+description = "A small coding agent that works inside one directory, with approval before writes and an offline eval."
+requires-python = ">=3.10"
+dependencies = ["google-genai>=1.12", "python-dotenv>=1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 130
+extend-exclude = ["evals/tasks", "calculator"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]  # the formatter owns line length

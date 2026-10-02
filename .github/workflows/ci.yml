@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check . && ruff format --check .
+      - run: pytest -q --cov=fixer --cov=evals --cov-report=term
+      - name: Eval gate (oracle must pass everything)
+        run: python -m evals.run --model oracle --min-pass-rate 1.0
+      - name: Eval gate (no-op baseline must pass nothing)
+        run: |
+          python -m evals.run --model noop --out noop.json
+          python -c "import json,sys; s=json.load(open('noop.json')); sys.exit(1 if s['passed'] else 0)"
+      - name: Demo calculator tests
+        working-directory: calculator
+        run: python -m unittest -q tests.py
+
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
