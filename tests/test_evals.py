@@ -40,3 +40,27 @@ def test_every_task_is_actually_broken_and_actually_fixable():
         fixed = eval_run.run_task(task_dir, "oracle", 10, None)
         assert not broken.passed, task_dir.name
         assert fixed.passed, task_dir.name
+
+
+def test_transcripts_are_written(tmp_path):
+    tx = tmp_path / "tx"
+    assert eval_run.main(["--model", "oracle", "--task", "safe_div_zero", "--transcripts", str(tx)]) == 0
+    text = (tx / "safe_div_zero.txt").read_text()
+    assert text.startswith("USER: ") and "CALL write_file" in text and "RESULT run_tests" in text
+
+
+def test_provider_error_keeps_finished_tasks(tmp_path, monkeypatch):
+    real_make = eval_run.make_model
+
+    def flaky(name, task_dir, gemini_model):
+        if task_dir.name == "slugify_case":
+            raise RuntimeError("daily quota")
+        return real_make("oracle", task_dir, gemini_model)
+
+    monkeypatch.setattr(eval_run, "make_model", flaky)
+    out = tmp_path / "s.json"
+    code = eval_run.main(["--model", "x", "--task", "safe_div_zero", "--task", "slugify_case", "--out", str(out)])
+    summary = json.loads(out.read_text())
+    assert code == 2
+    assert summary["passed"] == 1 and summary["tasks"] == 1
+    assert summary["aborted"].startswith("slugify_case: RuntimeError")

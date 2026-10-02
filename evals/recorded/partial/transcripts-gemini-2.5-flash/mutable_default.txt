@@ -1,0 +1,82 @@
+USER: Calling add_tag twice without a list leaks tags between calls. Fix it.
+CALL list_files {}
+RESULT list_files:
+- tags.py (111 bytes)
+- test_tags.py (266 bytes)
+CALL read_file {"path": "tags.py"}
+RESULT read_file:
+def add_tag(tag, tags=[]):
+    """Return a new list with tag appended."""
+    tags.append(tag)
+    return tags
+
+CALL write_file {"path": "tags.py", "content": "def add_tag(tag, tags=None):\n    \"\"\"Return a new list with tag appended.\"\"\"\n    if tags is None:\n        tags = []\n    tags.append(tag)\n    return tags\n"}
+RESULT write_file:
+Wrote "tags.py" (152 characters).
+--- a/tags.py
++++ b/tags.py
+@@ -1,4 +1,6 @@
+-def add_tag(tag, tags=[]):
++def add_tag(tag, tags=None):
+     """Return a new list with tag appended."""
++    if tags is None:
++        tags = []
+     tags.append(tag)
+     return tags
+
+CALL run_tests {}
+RESULT run_tests:
+exit code 1
+STDOUT:
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+______________________ test_existing_list_is_not_mutated _______________________
+
+    def test_existing_list_is_not_mutated():
+        original = ["x"]
+        assert add_tag("y", original) == ["x", "y"]
+>       assert original == ["x"]
+E       AssertionError: assert ['x', 'y'] == ['x']
+E         
+E         Left contains one more item: 'y'
+E         Use -v to get more diff
+
+test_tags.py:10: AssertionError
+=========================== short test summary info ============================
+FAILED test_tags.py::test_existing_list_is_not_mutated - AssertionError: asse...
+1 failed, 1 passed in 0.01s
+
+CALL write_file {"path": "tags.py", "content": "def add_tag(tag, tags=None):\n    \"\"\"Return a new list with tag appended.\"\"\"\n    if tags is None:\n        tags = []\n    else:\n        tags = list(tags) # Create a copy to avoid modifying the original list\n    tags.append(tag)\n    return tags\n"}
+RESULT write_file:
+Wrote "tags.py" (241 characters).
+--- a/tags.py
++++ b/tags.py
+@@ -2,5 +2,7 @@
+     """Return a new list with tag appended."""
+     if tags is None:
+         tags = []
++    else:
++        tags = list(tags) # Create a copy to avoid modifying the original list
+     tags.append(tag)
+     return tags
+
+CALL run_tests {}
+RESULT run_tests:
+exit code 0
+STDOUT:
+..                                                                       [100%]
+2 passed in 0.01s
+
+MODEL: I've fixed the issue of tags leaking between calls. The `add_tag` function now creates a new list when no `tags` argument is provided, and it creates a copy of the provided list if one is given. This prevents modification of the original list.
+
+The change was:
+```python
+def add_tag(tag, tags=None):
+    """Return a new list with tag appended."""
+    if tags is None:
+        tags = []
+    else:
+        tags = list(tags) # Create a copy to avoid modifying the original list
+    tags.append(tag)
+    return tags
+```

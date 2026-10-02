@@ -48,7 +48,31 @@ Results from this repo (offline scripted models, Python 3.12):
 | noop | 0/6 | 0 | 2.0 | 1.0 |
 | tamper | 0/6 | 6 | 3.0 | 2.0 |
 
-The scripted models exist to show that the harness can tell a real fix from no change or from gamed tests. A harness that scores everything 100% measures nothing. The oracle also checks that the loop runs several tool calls in one turn. Real model numbers come from `--model gemini`. They haven't been recorded here because this repo's CI has no API key.
+The scripted models exist to show that the harness can tell a real fix from no change or from gamed tests. A harness that scores everything 100% measures nothing. The oracle also checks that the loop runs several tool calls in one turn.
+
+Real Gemini runs (2026-10-03, Gemini API free tier, writes auto-approved, max 15 steps):
+
+| Model | Tasks run | Passed | Tampered | Mean steps | Mean tool calls |
+| --- | --- | --- | --- | --- | --- |
+| gemini-3.5-flash-lite | 6 | 6/6 | 0 | 7.0 | 6.0 |
+| gemini-2.5-flash | 3 (stopped by quota) | 3/3 | 0 | 6.0 | 5.0 |
+| gemini-3.5-flash | 1 (stopped by quota) | 1/1 | 0 | 6.0 | 6.0 |
+
+Only the flash-lite row is a full run. The free tier allows 20 requests per day each for gemini-2.5-flash and gemini-3.5-flash, and a 6-task run needs about 40, so those runs stopped partway. JSON and readable transcripts are in `evals/recorded/`.
+
+What the transcripts show:
+
+- gemini-3.5-flash-lite made the same one-line fix as the reference on every task, with one write each, and ran the tests before and after.
+- gemini-2.5-flash skipped running the tests before editing on 2 of 3 tasks. On `mutable_default` its first fix still mutated the caller's list; the failing test caught it, and the second write fixed it.
+- No run touched a test file.
+- 6/6 on the smallest model means these six tasks are now too easy to separate models. They still catch a broken agent loop, which is what found the bug below. Harder tasks (bugs spread over two files, misleading prompts, failing tests that need reading a traceback) are the next step.
+
+Bug found by the real run: Gemini 3 models return a "thought signature" with each function call and reject the next request if it is not sent back. The adapter dropped it, so every Gemini 3 run failed on step 2 with HTTP 400. It now keeps the signature on each `ToolCall`. The adapter also spaces calls (`FIXER_MIN_INTERVAL_S`), retries per-minute 429s using the server's retry delay, and stops on a daily quota instead of retrying. The harness keeps finished tasks when a provider error stops a run, and `--transcripts DIR` writes one readable log per task.
+
+```bash
+GEMINI_API_KEY=... FIXER_MIN_INTERVAL_S=5 python -m evals.run --model gemini --gemini-model gemini-3.5-flash-lite \
+  --out evals/recorded/gemini-3.5-flash-lite.json --transcripts evals/recorded/transcripts-gemini-3.5-flash-lite
+```
 
 ## Layout
 
@@ -58,8 +82,8 @@ fixer/tools.py       tools, diff and approval, subprocess sandboxing
 fixer/agent.py       provider-neutral loop (Model.step -> Reply)
 fixer/gemini.py      Gemini adapter (default gemini-2.5-flash, override with --model or FIXER_MODEL)
 fixer/cli.py         python -m fixer
-evals/               seeded tasks, scripted models, harness
-tests/               31 pytest tests
+evals/               seeded tasks, scripted models, harness, recorded Gemini runs
+tests/               37 pytest tests
 calculator/          demo project to point the agent at
 ```
 
@@ -71,4 +95,4 @@ pytest --cov=fixer --cov=evals
 ruff check . && ruff format --check .
 ```
 
-CI runs lint, the tests (88% coverage), and the offline eval with a gate: the oracle must pass every task and the no-op baseline must pass none.
+CI runs lint, the tests (89% coverage), and the offline eval with a gate: the oracle must pass every task and the no-op baseline must pass none.

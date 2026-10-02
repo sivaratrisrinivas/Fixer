@@ -30,6 +30,8 @@ class ToolCall:
     name: str
     args: dict[str, Any]
     id: str | None = None
+    # Opaque provider data that must be echoed back with the call (Gemini 3 thought signatures).
+    signature: bytes | None = None
 
 
 @dataclass

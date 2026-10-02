@@ -1,0 +1,83 @@
+USER: parse_duration("1h30m") returns 111600, not 5400. Fix it.
+CALL list_files {}
+RESULT list_files:
+- durations.py (270 bytes)
+- test_durations.py (236 bytes)
+CALL read_file {"path": "durations.py"}
+RESULT read_file:
+import re
+
+
+def parse_duration(text):
+    """'1h30m' -> 5400 seconds. Supports h, m and s."""
+    units = {"h": 3600, "m": 3600, "s": 1}
+    total = 0
+    for amount, unit in re.findall(r"(\d+)([hms])", text):
+        total += int(amount) * units[unit]
+    return total
+
+CALL read_file {"path": "test_durations.py"}
+RESULT read_file:
+from durations import parse_duration
+
+def test_hours_and_minutes():
+    assert parse_duration("1h30m") == 5400
+
+def test_seconds():
+    assert parse_duration("45s") == 45
+
+def test_minutes_only():
+    assert parse_duration("2m") == 120
+
+CALL run_tests {}
+RESULT run_tests:
+exit code 1
+STDOUT:
+F.F                                                                      [100%]
+=================================== FAILURES ===================================
+____________________________ test_hours_and_minutes ____________________________
+
+    def test_hours_and_minutes():
+>       assert parse_duration("1h30m") == 5400
+E       AssertionError: assert 111600 == 5400
+E        +  where 111600 = parse_duration('1h30m')
+
+test_durations.py:4: AssertionError
+______________________________ test_minutes_only _______________________________
+
+    def test_minutes_only():
+>       assert parse_duration("2m") == 120
+E       AssertionError: assert 7200 == 120
+E        +  where 7200 = parse_duration('2m')
+
+test_durations.py:10: AssertionError
+=========================== short test summary info ============================
+FAILED test_durations.py::test_hours_and_minutes - AssertionError: assert 111...
+FAILED test_durations.py::test_minutes_only - AssertionError: assert 7200 == 120
+2 failed, 1 passed in 0.01s
+
+CALL write_file {"path": "durations.py", "content": "import re\n\n\ndef parse_duration(text):\n    \"\"\"'1h30m' -> 5400 seconds. Supports h, m and s.\"\"\"\n    units = {\"h\": 3600, \"m\": 60, \"s\": 1}\n    total = 0\n    for amount, unit in re.findall(r\"(\\d+)([hms])\", text):\n        total += int(amount) * units[unit]\n    return total\n"}
+RESULT write_file:
+Wrote "durations.py" (268 characters).
+--- a/durations.py
++++ b/durations.py
+@@ -3,7 +3,7 @@
+ 
+ def parse_duration(text):
+     """'1h30m' -> 5400 seconds. Supports h, m and s."""
+-    units = {"h": 3600, "m": 3600, "s": 1}
++    units = {"h": 3600, "m": 60, "s": 1}
+     total = 0
+     for amount, unit in re.findall(r"(\d+)([hms])", text):
+         total += int(amount) * units[unit]
+
+CALL run_tests {}
+RESULT run_tests:
+exit code 0
+STDOUT:
+...                                                                      [100%]
+3 passed in 0.01s
+
+MODEL: I have fixed the issue where `parse_duration` calculated minutes incorrectly. 
+
+Specifically, in `durations.py`, the multiplier for minutes (`"m"`) in the `units` dictionary was incorrectly set to `3600` (one hour in seconds) instead of `60` (one minute in seconds). I updated `"m"` to `60`, and all tests now pass successfully.
